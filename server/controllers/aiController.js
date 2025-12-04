@@ -3,62 +3,69 @@ const ChatHistory = require("../models/ChatHistory");
 const Product = require("../models/Product");
 require("dotenv").config();
 
+// ✅ Import fetch
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
-// 🔹 Shuffle mảng
+// 🔹 Hàm trộn ngẫu nhiên mảng
 const shuffleArray = (array) =>
   array
     .map((v) => ({ v, sort: Math.random() }))
     .sort((a, b) => a.sort - b.sort)
     .map(({ v }) => v);
 
-// 🔹 Loại trùng sản phẩm theo id
+// 🔹 Loại trùng theo id
 const uniqueProducts = (products) => {
   const seen = new Set();
   return products.filter((p) => {
-    if (!p.id || seen.has(p.id)) return false;
-    seen.add(p.id);
+    const id = p._id?.toString();
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
     return true;
   });
 };
 
+// =============================================
 // ✅ POST /api/ai/make-coffee
+// =============================================
 const makeCoffee = async (req, res) => {
   try {
     const { prompt, categorySlug } = req.body;
     const userId = req.user?._id;
 
     if (!prompt?.trim())
-      return res
-        .status(400)
-        .json({ success: false, message: "⚠️ Vui lòng nhập yêu cầu pha cà phê." });
+      return res.status(400).json({
+        success: false,
+        message: "⚠️ Vui lòng nhập yêu cầu pha cà phê.",
+      });
 
     if (!userId || !mongoose.Types.ObjectId.isValid(userId))
-      return res
-        .status(401)
-        .json({ success: false, message: "⚠️ Người dùng chưa được xác thực." });
+      return res.status(401).json({
+        success: false,
+        message: "⚠️ Người dùng chưa được xác thực.",
+      });
 
     const apiKey = process.env.GOOGLE_API_KEY;
     if (!apiKey)
-      return res
-        .status(500)
-        .json({ success: false, message: "❌ Thiếu GOOGLE_API_KEY trong file .env." });
+      return res.status(500).json({
+        success: false,
+        message: "❌ Thiếu GOOGLE_API_KEY trong file .env.",
+      });
 
     const MODEL_NAME = "gemini-2.0-flash";
 
     // 🧠 Prompt gửi đến AI
     const fullPrompt = `
-Bạn là **Barista AI chuyên nghiệp** tại **TasteTheCoffee**, có hơn 10 năm kinh nghiệm.  
+Bạn là **Barista AI chuyên nghiệp** tại **TasteTheCoffee**, có hơn 10 năm kinh nghiệm.
 Khách hàng hỏi: **"${prompt}"**
 
-🧠 Nhiệm vụ của bạn:
-- Trả lời **bằng tiếng Việt**, **rõ ràng và chi tiết nhất có thể**.  
-- Giữ nguyên **định dạng Markdown** để dễ hiển thị.
-- Tránh tự động thêm phần "💡 Gợi ý sản phẩm phù hợp", chỉ tập trung vào mô tả và hướng dẫn pha chế.
+🧠 Nhiệm vụ:
+- Trả lời **bằng tiếng Việt**, **rõ ràng và chi tiết nhất có thể**.
+- Giữ nguyên **định dạng Markdown** để hiển thị đẹp.
+- Không tự thêm phần "💡 Gợi ý sản phẩm", chỉ trả lời hướng dẫn pha chế.
 `;
 
-    // 🔸 Gọi API Gemini
+    // 🔸 Gọi Google Gemini API
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/${MODEL_NAME}:generateContent?key=${apiKey}`,
       {
@@ -81,15 +88,18 @@ Khách hàng hỏi: **"${prompt}"**
       "❌ Không nhận được phản hồi từ AI.";
     aiText = aiText.split("💡 Gợi ý sản phẩm phù hợp")[0].trim();
 
-    // 🔎 Tạo từ khóa tìm kiếm
+    // =============================================
+    // 🔎 TÌM SẢN PHẨM GỢI Ý
+    // =============================================
+
     const normalizedPrompt = prompt
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase();
     const keywords = normalizedPrompt.split(/\s+/).filter((w) => w.length > 1);
 
-    // 1️⃣ Tìm sản phẩm theo prompt/keywords
     let suggestedProducts = [];
+
     try {
       const directQuery = {
         $or: [
@@ -98,6 +108,7 @@ Khách hàng hỏi: **"${prompt}"**
           ...keywords.map((w) => ({ name: { $regex: w, $options: "i" } })),
         ],
       };
+
       suggestedProducts = await Product.find(directQuery)
         .select("name slug price image category productCode")
         .lean();
@@ -105,9 +116,10 @@ Khách hàng hỏi: **"${prompt}"**
       console.error("⚠️ Lỗi tìm sản phẩm theo prompt:", err);
     }
 
-    // 2️⃣ Fallback nếu chưa đủ 3 sản phẩm
+    // 🔸 Fallback nếu chưa đủ 3 sản phẩm
     if (suggestedProducts.length < 3) {
       let categoryFilter = {};
+
       if (categorySlug) categoryFilter = { category: categorySlug };
       else if (keywords.some((w) => ["tienloi", "hoatan", "goi", "nhanh"].includes(w)))
         categoryFilter = { category: "ca-phe-tien-loi" };
@@ -120,34 +132,61 @@ Khách hàng hỏi: **"${prompt}"**
         const fallbackProducts = await Product.find(categoryFilter)
           .select("name slug price image category productCode")
           .lean();
-        suggestedProducts = [...suggestedProducts, ...fallbackProducts];
-        suggestedProducts = uniqueProducts(suggestedProducts);
+        suggestedProducts = uniqueProducts([...suggestedProducts, ...fallbackProducts]);
       } catch (err) {
-        console.error("⚠️ Lỗi fallback theo category:", err);
+        console.error("⚠️ Lỗi fallback sản phẩm:", err);
       }
     }
 
-    // 3️⃣ Lấy tất cả id gợi ý đã dùng trong lịch sử
-    const allSuggestedIds = await ChatHistory.find({ userId }).distinct(
-      "suggestions.id"
+    // 🔹 Lọc sản phẩm gợi ý đã từng dùng (chỉ lấy 5 câu hỏi gần nhất để tránh lọc quá nhiều)
+    let usedIds = [];
+    try {
+      const recentChats = await ChatHistory.find({ userId })
+        .sort({ createdAt: -1 })
+        .limit(5) // Chỉ lấy 5 câu hỏi gần nhất
+        .select("suggestions")
+        .lean();
+      
+      // Lấy tất cả ID sản phẩm từ 5 câu hỏi gần nhất
+      const allUsedIds = new Set();
+      recentChats.forEach((chat) => {
+        if (chat.suggestions && Array.isArray(chat.suggestions)) {
+          chat.suggestions.forEach((suggestion) => {
+            if (suggestion.id) {
+              allUsedIds.add(suggestion.id);
+            }
+          });
+        }
+      });
+      usedIds = Array.from(allUsedIds);
+    } catch (err) {
+      console.error("⚠️ Lỗi lấy danh sách sản phẩm đã dùng:", err);
+    }
+    
+    // Lọc sản phẩm đã từng gợi ý
+    const filteredProducts = suggestedProducts.filter(
+      (p) => !usedIds.includes(p._id?.toString?.())
     );
-    suggestedProducts = suggestedProducts.filter((p) => {
-      const id = p._id?.toString() || p.slug;
-      return !allSuggestedIds.includes(id);
-    });
 
-    // 4️⃣ Shuffle và lấy tối đa 3 sản phẩm
+    // 🔹 Nếu sau khi lọc vẫn còn đủ sản phẩm (>= 3), dùng danh sách đã lọc
+    // Nếu không đủ, dùng lại danh sách gốc để đảm bảo luôn có sản phẩm gợi ý
+    if (filteredProducts.length >= 3) {
+      suggestedProducts = filteredProducts;
+    }
+    // Nếu filteredProducts < 3, giữ nguyên suggestedProducts gốc để đảm bảo luôn có gợi ý
+
+    // 🔹 Lấy ngẫu nhiên tối đa 3 sản phẩm
     suggestedProducts = shuffleArray(suggestedProducts).slice(0, 3);
 
-    // ✅ 5️⃣ Gán id ổn định + thêm slug (sửa lỗi hiển thị frontend)
+    // 🔹 Chuẩn hóa dữ liệu trả về
     const mappedSuggestions = suggestedProducts.map((item, idx) => ({
-      id: item._id?.toString() || item.slug || `suggestion_${Date.now()}_${idx}`,
+      id: item._id?.toString() || `suggestion_${Date.now()}_${idx}`,
       name: item.name,
-      slug: item.slug || "", // ✅ thêm dòng này
-      price: item.price,
-      image: item.image,
-      category: item.category,
-      productCode: item.productCode,
+      slug: item.slug || "",
+      price: item.price || 0,
+      image: item.image || "",
+      category: item.category || "khac",
+      productCode: item.productCode || "",
       categorySlug:
         item.category === "ca-phe-nguyen-chat"
           ? "ca-phe-nguyen-chat"
@@ -158,7 +197,9 @@ Khách hàng hỏi: **"${prompt}"**
           : "ca-phe-khac",
     }));
 
+    // =============================================
     // 💾 Lưu lịch sử chat
+    // =============================================
     const newChat = await ChatHistory.create({
       userId,
       question: prompt.trim(),
@@ -166,6 +207,7 @@ Khách hàng hỏi: **"${prompt}"**
       suggestions: mappedSuggestions,
     });
 
+    // ✅ Trả về kết quả cho frontend
     return res.json({
       success: true,
       chat: newChat,
@@ -181,7 +223,9 @@ Khách hàng hỏi: **"${prompt}"**
   }
 };
 
+// =============================================
 // ✅ GET /api/ai/history
+// =============================================
 const getHistory = async (req, res) => {
   try {
     const userId = req.user?._id;
@@ -190,9 +234,8 @@ const getHistory = async (req, res) => {
         .status(401)
         .json({ success: false, message: "⚠️ Người dùng chưa được xác thực." });
 
-    const chats = await ChatHistory.find({ userId })
-      .sort({ createdAt: -1 })
-      .lean();
+    const chats = await ChatHistory.find({ userId }).sort({ createdAt: -1 }).lean();
+
     return res.json({ success: true, history: chats });
   } catch (err) {
     console.error("❌ Lỗi lấy lịch sử:", err);
@@ -204,7 +247,9 @@ const getHistory = async (req, res) => {
   }
 };
 
+// =============================================
 // ✅ DELETE /api/ai/history
+// =============================================
 const clearHistory = async (req, res) => {
   try {
     const userId = req.user?._id;
@@ -214,6 +259,7 @@ const clearHistory = async (req, res) => {
         .json({ success: false, message: "⚠️ Người dùng chưa được xác thực." });
 
     await ChatHistory.deleteMany({ userId });
+
     return res.json({
       success: true,
       message: "✅ Đã xóa toàn bộ lịch sử chat.",

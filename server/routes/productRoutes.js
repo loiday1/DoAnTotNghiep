@@ -1,76 +1,37 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const router = express.Router();
-const Product = require("../models/Product");
 const mongoose = require("mongoose");
+const Product = require("../models/Product");
 
-// ===== CORS middleware riêng cho router này =====
+const router = express.Router();
+
+// ===================== CORS =====================
 const allowedOrigins = [
   "http://localhost:5173",
-  "http://localhost:5174",
-  process.env.CLIENT_URL,
-  /^http:\/\/localhost:\d+$/, // Cho phép tất cả localhost ports
-  /^https:\/\/.+\.ngrok-free\.(app|dev)$/  // match ngrok subdomain
-];
+  process.env.CLIENT_URL
+].filter(Boolean);
 
-// Helper function để check origin
-const isOriginAllowed = (origin) => {
-  if (!origin) return true;
-  return allowedOrigins.some(o =>
-    typeof o === "string" ? o === origin : o instanceof RegExp && o.test(origin)
-  );
-};
-
-// Preflight handler cho router này - dùng middleware thay vì route pattern
-router.use((req, res, next) => {
-  if (req.method === "OPTIONS") {
-    const origin = req.headers.origin;
-    console.log(`🔄 [Public Preflight] OPTIONS request from: ${origin}`);
-    if (isOriginAllowed(origin)) {
-      res.header("Access-Control-Allow-Origin", origin);
-      res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-      res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, ngrok-skip-browser-warning");
-      res.header("Access-Control-Allow-Credentials", "true");
-      res.header("Access-Control-Max-Age", "86400");
-      console.log(`✅ [Public Preflight] Allowed: ${origin}`);
-      return res.sendStatus(200);
-    }
-    console.error(`❌ [Public Preflight] Blocked: ${origin}`);
-    return res.sendStatus(403);
-  }
-  next();
-});
+allowedOrigins.push(/^https:\/\/.+\.ngrok-free\.(app|dev)$/);
 
 const corsOptions = {
-  origin: function(origin, callback) {
-    if (isOriginAllowed(origin)) {
-      callback(null, true);
-    } else {
-      console.error(`❌ [Public CORS] Origin blocked: ${origin}`);
-      callback(new Error(`Origin ${origin} not allowed by CORS`), false);
-    }
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // cho phép Postman / curl
+    const allowed = allowedOrigins.some(o =>
+      typeof o === "string" ? o === origin : o.test(origin)
+    );
+    callback(allowed ? null : new Error("Not allowed by CORS"), allowed);
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: [
-    "Origin",
-    "X-Requested-With",
-    "Content-Type",
-    "Accept",
-    "Authorization",
-    "ngrok-skip-browser-warning"
-  ],
-  exposedHeaders: ["Content-Type", "Authorization"],
-  preflightContinue: false,
-  optionsSuccessStatus: 200
+  allowedHeaders: ["Origin", "X-Requested-With", "Content-Type", "Accept", "Authorization"]
 };
 
-// Áp dụng CORS cho toàn router (bao gồm preflight)
 router.use(cors(corsOptions));
 
-// ===== Routes =====
+// ===================== ROUTES =====================
 
+/** 🟤 Lấy tất cả sản phẩm */
 router.get("/products", async (req, res) => {
   try {
     const products = await Product.find().lean();
@@ -81,6 +42,7 @@ router.get("/products", async (req, res) => {
   }
 });
 
+/** 🟠 Lấy sản phẩm theo category slug */
 router.get("/products/category/:slug", async (req, res) => {
   try {
     const { slug } = req.params;
@@ -92,6 +54,7 @@ router.get("/products/category/:slug", async (req, res) => {
   }
 });
 
+/** 🟢 Lấy chi tiết sản phẩm theo ID */
 router.get("/products/detail/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -111,6 +74,7 @@ router.get("/products/detail/:id", async (req, res) => {
   }
 });
 
+/** 🔵 Tìm sản phẩm theo tên */
 router.get("/products/search/:name", async (req, res) => {
   try {
     const name = decodeURIComponent(req.params.name);
@@ -132,14 +96,5 @@ router.get("/products/search/:name", async (req, res) => {
     res.status(500).json({ message: "Lỗi khi tìm sản phẩm theo tên", error: err.message });
   }
 });
-
-// ================== BLOG ROUTES ==================
-const { getAllBlogs, getBlogById } = require("../controllers/blogController");
-
-// Lấy tất cả blog (public - chỉ published)
-router.get("/blogs", getAllBlogs);
-
-// Lấy blog theo ID hoặc slug (public)
-router.get("/blogs/:id", getBlogById);
 
 module.exports = router;

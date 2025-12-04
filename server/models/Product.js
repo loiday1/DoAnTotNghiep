@@ -43,6 +43,21 @@ const productSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    inStock: {
+      type: Boolean,
+      default: true, // Mặc định còn hàng
+    },
+    averageRating: {
+      type: Number,
+      min: 0,
+      max: 5,
+      default: 0,
+    },
+    totalReviews: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   { timestamps: true }
 );
