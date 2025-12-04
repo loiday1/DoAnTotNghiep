@@ -308,16 +308,17 @@ exports.deleteOrder = async (req, res) => {
 exports.cancelOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { userId } = req.body; // userId từ request body để verify quyền
+    // ✅ SECURITY FIX: Lấy userId từ JWT token thay vì từ body
+    const userId = req.user?.id || req.user?._id?.toString();
+    
+    if (!userId) {
+      return res.status(401).json({ message: 'Bạn cần đăng nhập để hủy đơn hàng' });
+    }
 
     console.log(`🚫 [OrderController] cancelOrder called for order: ${orderId}, userId: ${userId}`);
 
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
       return res.status(400).json({ message: 'ID đơn hàng không hợp lệ' });
-    }
-
-    if (!userId) {
-      return res.status(400).json({ message: 'userId là bắt buộc' });
     }
 
     // Tìm đơn hàng
@@ -328,7 +329,7 @@ exports.cancelOrder = async (req, res) => {
     }
 
     // Kiểm tra quyền: chỉ chủ đơn hàng mới được hủy
-    if (order.userId !== userId) {
+    if (order.userId.toString() !== userId) {
       return res.status(403).json({ message: 'Bạn không có quyền hủy đơn hàng này' });
     }
 
@@ -338,8 +339,8 @@ exports.cancelOrder = async (req, res) => {
       statusLower.includes("đang xử lý") || 
       statusLower.includes("xác nhận đơn hàng") ||
       statusLower.includes("confirmed") ||
-      status === "Đang xử lý" ||
-      status === "Xác nhận đơn hàng";
+      order.status === "Đang xử lý" ||
+      order.status === "Xác nhận đơn hàng";
 
     if (!canCancel) {
       // Kiểm tra nếu đã hủy rồi

@@ -3,9 +3,19 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_here';
+// ✅ SECURITY FIX: Bắt buộc phải có JWT_SECRET trong .env
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error("❌ [SECURITY] JWT_SECRET is not set in .env file!");
+  throw new Error("JWT_SECRET is required. Please set it in .env file.");
+}
+
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+if (!GOOGLE_CLIENT_ID) {
+  console.warn("⚠️ [AUTH] GOOGLE_CLIENT_ID is not set. Google OAuth will not work.");
+}
+
+const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
 // ================= REGISTER =================
 exports.register = async (req, res) => {
@@ -53,6 +63,10 @@ exports.login = async (req, res) => {
 // ================= GOOGLE LOGIN =================
 exports.googleLogin = async (req, res) => {
   try {
+    if (!googleClient) {
+      return res.status(500).json({ message: "Google OAuth chưa được cấu hình" });
+    }
+    
     const { token: googleToken } = req.body;
     if (!googleToken) return res.status(400).json({ message: "Thiếu token Google" });
 

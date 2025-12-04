@@ -2,7 +2,12 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 require("dotenv").config();
 
-const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_here";
+// ✅ SECURITY FIX: Bắt buộc phải có JWT_SECRET trong .env
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error("❌ [SECURITY] JWT_SECRET is not set in .env file!");
+  throw new Error("JWT_SECRET is required. Please set it in .env file.");
+}
 
 // ✅ Xác thực token người dùng
 const verifyToken = async (req, res, next) => {

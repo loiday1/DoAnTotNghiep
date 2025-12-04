@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { createOrder, getUserOrders, getOrderDetail, updateOrderStatus, cancelOrder } = require("../controllers/orderController");
+const { verifyToken } = require("../middleware/authMiddleware");
 
 // ===== Tạo đơn hàng mới =====
 // Route POST /api/orders (từ CheckoutPage) - PHẢI ĐẶT TRƯỚC route GET /:userId
@@ -24,7 +25,8 @@ router.get("/user/:userId", getUserOrders);
 router.put("/:orderId/status", updateOrderStatus);
 
 // ===== Hủy đơn hàng (khách hàng) =====
-router.post("/:orderId/cancel", cancelOrder);
+// ✅ SECURITY FIX: Thêm verifyToken middleware để lấy userId từ JWT
+router.post("/:orderId/cancel", verifyToken, cancelOrder);
 
 // ===== Lấy danh sách đơn hàng của user (route ngắn) =====
 // Route này phải đặt CUỐI CÙNG vì nó match mọi GET request

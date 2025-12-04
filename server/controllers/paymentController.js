@@ -9,11 +9,18 @@ exports.createMoMoPayment = async (req, res) => {
   try {
     const { amount, orderInfo, orderId } = req.body;
 
-    // MoMo configuration - Test credentials
-    // Lưu ý: Để sử dụng thực tế, cần đăng ký tài khoản business tại https://developers.momo.vn/
-    const partnerCode = process.env.MOMO_PARTNER_CODE || "MOMOBKUN20180529";
-    const accessKey = process.env.MOMO_ACCESS_KEY || "klm05TvNBzhg7h7j";
-    const secretKey = process.env.MOMO_SECRET_KEY || "at67qH6mk8w5Y1nAyMoYKMWACiEi2bsa";
+    // MoMo configuration
+    // ✅ SECURITY FIX: Bắt buộc phải có credentials trong .env, không có fallback
+    const partnerCode = process.env.MOMO_PARTNER_CODE;
+    const accessKey = process.env.MOMO_ACCESS_KEY;
+    const secretKey = process.env.MOMO_SECRET_KEY;
+    
+    if (!partnerCode || !accessKey || !secretKey) {
+      console.error("❌ [MoMo] Missing MoMo credentials in .env file");
+      return res.status(500).json({ 
+        message: "Cấu hình thanh toán MoMo chưa được thiết lập. Vui lòng liên hệ admin." 
+      });
+    }
     const momoApiUrl = process.env.MOMO_API_URL || "https://test-payment.momo.vn/v2/gateway/api/create";
     const backendUrl = process.env.BACKEND_URL || "http://localhost:5000";
     const returnUrl = process.env.MOMO_RETURN_URL || `${backendUrl}/api/payment/momo_return`;
