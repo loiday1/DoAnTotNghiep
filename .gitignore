@@ -8,12 +8,18 @@ server/package-lock.json
 
 # Environment variables
 .env
+.env.*
+!.env.example
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 server/.env
+server/.env.*
+!server/.env.example
 client/.env
+client/.env.*
+!client/.env.example
 
 # Build outputs
 dist/

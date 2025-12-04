@@ -5,7 +5,12 @@ const { OAuth2Client } = require("google-auth-library");
 const User = require("../models/User");
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_here";
+// ✅ SECURITY FIX: Bắt buộc phải có JWT_SECRET trong .env
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error("❌ [SECURITY] JWT_SECRET is not set in .env file!");
+  throw new Error("JWT_SECRET is required. Please set it in .env file.");
+}
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
